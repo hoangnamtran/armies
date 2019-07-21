@@ -1,19 +1,26 @@
 package com.syniverse.wdm.interview.armedforces.repository;
 
-import java.util.*;
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.Collections;
+import java.util.Comparator;
+import java.util.List;
+import java.util.Map;
+import java.util.Optional;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.stream.Collectors;
-
+import java.util.stream.IntStream;
+import java.util.stream.Stream;
 import javax.annotation.PostConstruct;
-
-import com.syniverse.wdm.interview.armedforces.dto.Army;
-import com.syniverse.wdm.interview.armedforces.dto.ArmyType;
-import com.syniverse.wdm.interview.armedforces.dto.Unit;
-import com.syniverse.wdm.interview.armedforces.dto.UnitType;
+import org.apache.commons.lang3.StringUtils;
 import org.springframework.context.annotation.Profile;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Repository;
 import org.springframework.web.server.ResponseStatusException;
+import com.syniverse.wdm.interview.armedforces.dto.Army;
+import com.syniverse.wdm.interview.armedforces.dto.ArmyType;
+import com.syniverse.wdm.interview.armedforces.dto.Unit;
+import com.syniverse.wdm.interview.armedforces.dto.UnitType;
 
 @Profile("repo-collections")
 @Repository
@@ -74,6 +81,10 @@ public class ArmedForcesRepositoryCollectionImpl implements ArmedForcesRepositor
     // @formatter:on
   }
 
+  public static <T> void addToList(List<T> target, Stream<T> source) {
+    target.addAll(source.collect(Collectors.toList()));
+  }
+
   @Override
   public Long createArmy(final Army army) {
     if (this.armies.size() < 50) {
@@ -82,7 +93,8 @@ public class ArmedForcesRepositoryCollectionImpl implements ArmedForcesRepositor
       this.armies.put(armyId, army);
       return armyId;
     } else {
-      throw new ResponseStatusException(HttpStatus.UNPROCESSABLE_ENTITY, "Cannot add more armies. You already have way too many to manage, Sir!");
+      throw new ResponseStatusException(HttpStatus.UNPROCESSABLE_ENTITY,
+          "Cannot add more armies. You already have way too many to manage, Sir!");
     }
   }
 
@@ -92,16 +104,39 @@ public class ArmedForcesRepositoryCollectionImpl implements ArmedForcesRepositor
   }
 
   @Override
+  public List<Army> getArmiesByType(final String type) {
+    return getArmies().stream()
+        .filter(army -> StringUtils.isNotBlank(type) && type.equals(army.getType().toString()))
+        .collect(Collectors.toList());
+  }
+
+  @Override
   public Army getArmyById(final Long armyId) {
     return Optional.ofNullable(this.armies.get(armyId))
-        .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Hmmm. That army does not seem to exist, Sir!"));
+        .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND,
+            "Hmmm. That army does not seem to exist, Sir!"));
   }
 
   @Override
   public Long recruitUnit(final Long armyId, final Unit unit) {
+    Army army = getArmyById(armyId);
+    if (army.getType() != unit.getType().getArmyType()) {
+      throw new ResponseStatusException(HttpStatus.NOT_FOUND,
+          "Hmmm. The unit type is not acceptable in that army");
+    }
 
-    // TODO: implement this
-    throw new UnsupportedOperationException("This API is not implemented yet!");
+    if (army.getUnits().size() < 100) {
+      final Long unitId = getNextUnitId(army);
+      unit.setId(unitId);
+      List<Unit> units = new ArrayList<>(army.getUnits());
+      addToList(units, Stream.of(Unit.builder().id(unitId).combatPower(unit.getCombatPower())
+          .type(unit.getType()).build()));
+      army.setUnits(units);
+      this.armies.replace(armyId, army);
+      return unitId;
+    } else {
+      throw new UnsupportedOperationException("This API is not implemented yet!");
+    }
   }
 
   @Override
@@ -109,11 +144,61 @@ public class ArmedForcesRepositoryCollectionImpl implements ArmedForcesRepositor
     return getArmyById(armyId).getUnits();
   }
 
+  @Override
+  public Unit getUnitById(final Long armyId, final Long unitId) {
+    return getArmyById(armyId).getUnits().stream().filter(unit -> unitId.equals(unit.getId()))
+        .findAny().orElse(null);
+  }
+
+  @Override
+  public Unit killUnit(final Long armyId, final Long unitId) {
+    Army army = getArmyById(armyId);
+    List<Unit> units = new ArrayList<>(army.getUnits());
+    Unit unit = IntStream.range(0, units.size()).filter(i -> units.get(i).getId().equals(unitId))
+        .boxed().findFirst().map(i -> units.remove(((int) i)))
+        .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND,
+            "Hmmm. That unit does not seem to exist, Sir!"));
+    
+    removeUnitFromArmy(army, units);
+
+    return unit;
+  }
+  
+  @Override
+  public Unit killStrongestUnit(final Long armyId, final Long unitId) {
+    Army army = getArmyById(armyId);
+    List<Unit> units = new ArrayList<>(army.getUnits());
+    
+    Unit[] maxObj = new Unit[1];
+    units.stream().max(Comparator.comparing( Unit::getCombatPower )).ifPresent(unit -> maxObj[0] = unit);
+    
+    Unit unit = IntStream.range(0, units.size()).filter(i -> units.get(i).getId().equals(unitId) && maxObj[0] != null && maxObj[0].equals(units.get(i)))
+        .boxed().findFirst().map(i -> units.remove(((int) i)))
+        .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND,
+            "Hmmm. That unit does not seem to exist, Sir!"));
+    removeUnitFromArmy(army, units);
+
+    return unit;
+  }
+  
+  private void removeUnitFromArmy(Army army, List<Unit> units) {
+    Long armyId = army.getId();
+    army.setUnits(units);
+    
+    if (units.isEmpty()) {
+      this.armies.remove(armyId, army);
+    } else {
+      this.armies.replace(armyId, army);
+    }
+  }
+
   private Long getNextArmyId() {
     return (this.armies.keySet().isEmpty() ? 0L : Collections.max(this.armies.keySet())) + 1L;
   }
 
   private Long getNextUnitId(final Army army) {
-    return (army.getUnits().isEmpty() ? 0L : Collections.max(army.getUnits().stream().map(Unit::getId).collect(Collectors.toList()))) + 1L;
+    return (army.getUnits().isEmpty() ? 0L
+        : Collections.max(army.getUnits().stream().map(Unit::getId).collect(Collectors.toList())))
+        + 1L;
   }
 }

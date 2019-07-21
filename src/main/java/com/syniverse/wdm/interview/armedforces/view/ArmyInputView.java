@@ -1,7 +1,6 @@
 package com.syniverse.wdm.interview.armedforces.view;
 
 import java.util.ArrayList;
-
 import com.syniverse.wdm.interview.armedforces.dto.Army;
 import com.syniverse.wdm.interview.armedforces.dto.ArmyType;
 import lombok.Builder;
