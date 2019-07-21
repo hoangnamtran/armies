@@ -26,4 +26,6 @@ public interface ArmedForcesRepository {
   public Unit killUnit(Long armyId, Long unitId);
   
   public Unit killStrongestUnit(Long armyId, Long unitId);
+  
+  public List<Army> mergeArmies();
 }

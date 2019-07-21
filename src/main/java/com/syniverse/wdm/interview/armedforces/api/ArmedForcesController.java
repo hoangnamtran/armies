@@ -5,6 +5,8 @@ package com.syniverse.wdm.interview.armedforces.api;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Optional;
+import java.util.concurrent.Callable;
+import java.util.concurrent.ThreadLocalRandom;
 import java.util.stream.Collectors;
 import javax.validation.Valid;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -109,5 +111,16 @@ public class ArmedForcesController {
   @PostMapping("/armies/{armyId:[\\d]+}/killStrongestUnit/{unitId:[\\d]+}")
   public UnitDetailsView killStrongestUnit(@PathVariable(name = "armyId") final Long armyId, @PathVariable(name = "unitId") final Long unitId) {
       return UnitDetailsView.fromUnit(this.armedForcesRepository.killStrongestUnit(armyId, unitId));
+  }
+  
+  @ApiOperation(value = "Merge one or more armies into the army identified by ID", notes = "Returns a list of all armies")
+  @ApiResponses({@ApiResponse(code = 200, message = "Success", response = UnitDetailsView.class)})
+  @PostMapping("/armies/merge")
+  public Callable<List<ArmyDetailsView>> merge() {
+    return () -> {
+          Thread.sleep(ThreadLocalRandom.current().nextInt(120000));
+           
+          return this.armedForcesRepository.mergeArmies().stream().map(ArmyDetailsView::fromArmy).collect(Collectors.toList());
+    };
   }
 }

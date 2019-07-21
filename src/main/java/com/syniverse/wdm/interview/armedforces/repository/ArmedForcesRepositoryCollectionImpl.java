@@ -81,10 +81,6 @@ public class ArmedForcesRepositoryCollectionImpl implements ArmedForcesRepositor
     // @formatter:on
   }
 
-  public static <T> void addToList(List<T> target, Stream<T> source) {
-    target.addAll(source.collect(Collectors.toList()));
-  }
-
   @Override
   public Long createArmy(final Army army) {
     if (this.armies.size() < 50) {
@@ -181,6 +177,14 @@ public class ArmedForcesRepositoryCollectionImpl implements ArmedForcesRepositor
     return unit;
   }
   
+  @Override
+  public List<Army> mergeArmies() {
+    List<Army> list = getArmies();
+    return list.stream()
+        .filter((Army army) -> army instanceof Army)
+        .collect(Collectors.toList());
+  }
+  
   private void removeUnitFromArmy(Army army, List<Unit> units) {
     Long armyId = army.getId();
     army.setUnits(units);
@@ -200,5 +204,9 @@ public class ArmedForcesRepositoryCollectionImpl implements ArmedForcesRepositor
     return (army.getUnits().isEmpty() ? 0L
         : Collections.max(army.getUnits().stream().map(Unit::getId).collect(Collectors.toList())))
         + 1L;
+  }
+
+  public static <T> void addToList(List<T> target, Stream<T> source) {
+    target.addAll(source.collect(Collectors.toList()));
   }
 }
